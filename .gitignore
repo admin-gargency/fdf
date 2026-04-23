@@ -1,57 +1,64 @@
-# Dependencies
-node_modules/
-.pnp
-.pnp.js
-.yarn/install-state.gz
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# Testing
-coverage/
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
 .nyc_output/
 
-# Next.js
-.next/
-out/
-build/
-dist/
+# next.js
+/.next/
+/out/
 
-# Production build
-*.tsbuildinfo
-next-env.d.ts
+# production
+/build
+/dist
 
-# Environment
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-.env*.local
+# misc
+.DS_Store
+Thumbs.db
+*.pem
 
-# Debug
+# debug
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# Editors / OS
-.DS_Store
-Thumbs.db
+# env files (can opt-in for committing if needed)
+.env*
+!.env.example
+
+# vercel
+.vercel
+
+# supabase
+supabase/.branches
+supabase/.temp
+supabase/.env
+
+# turbo
+.turbo
+
+# editors / os
 .idea/
 .vscode/
 *.swp
 *.swo
 
-# Vercel
-.vercel
+# typescript
+*.tsbuildinfo
+next-env.d.ts
 
-# Supabase
-supabase/.branches
-supabase/.temp
-supabase/.env
-
-# Turbo
-.turbo
-
-# Local secrets / runtime state
+# local secrets / runtime state
 *.log
 logs/
 .cache/
