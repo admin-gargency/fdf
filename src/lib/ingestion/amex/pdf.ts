@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-
 import { AmexPdfParseError } from "./errors";
 import { logAmexPdfParsed } from "./log";
 import {
@@ -7,6 +5,7 @@ import {
   parseItalianAmount,
   parseItalianDate,
 } from "./normalize";
+import { computeExternalId } from "./shared";
 import type {
   AmexPdfDiagnostic,
   AmexPdfParseOptions,
@@ -257,11 +256,3 @@ function detectStatementYear(rows: PdfTextRow[]): number | undefined {
   return undefined;
 }
 
-function computeExternalId(
-  date: string,
-  amount: number,
-  merchant_raw: string,
-): string {
-  const canonical = `${date}|${amount.toFixed(2)}|${merchant_raw.trim().toUpperCase()}`;
-  return createHash("sha256").update(canonical).digest("hex").slice(0, 32);
-}

@@ -28,3 +28,29 @@ export class AmexPdfParseError extends Error {
     this.context = context;
   }
 }
+
+export type AmexCsvErrorCode =
+  | "empty_csv"
+  | "unsupported_format"
+  | "no_transactions_found";
+
+export interface AmexCsvErrorContext {
+  headers?: string[];
+  rowsSampled?: number;
+}
+
+export class AmexCsvParseError extends Error {
+  readonly code: AmexCsvErrorCode;
+  readonly context: AmexCsvErrorContext;
+
+  constructor(
+    code: AmexCsvErrorCode,
+    message: string,
+    context: AmexCsvErrorContext = {},
+  ) {
+    super(message);
+    this.name = "AmexCsvParseError";
+    this.code = code;
+    this.context = context;
+  }
+}

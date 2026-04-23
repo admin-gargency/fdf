@@ -29,3 +29,12 @@ Fixture dataset per validazione empirica parser Amex Personal Italia
 3. Verifica output anonimizzato: nome cardholder, indirizzo, last4 diverso da reale,
    numeri carta mascherati, importi lasciati veri (dato di business, non PII).
 4. Commit `tests/amex/fixtures/<kind>/*` — mai committare raw.
+
+## Fixture sintetici (pre-customer-zero)
+
+- `csv/statement-sample.csv` — fixture sintetica aligned al formato
+  documentato del portale Amex IT (`Data`, `Data di registrazione`,
+  `Descrizione`, `Importo`, `Categoria Amex`, separator `;`, BOM-free).
+  Usata dai test unit del parser CSV (FDFA-31). **Va sostituita da un
+  export reale CEO anonimizzato entro M2 (2026-04-30)** per abilitare il
+  round-trip test vs PDF della stessa fascia mensile.
