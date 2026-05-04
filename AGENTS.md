@@ -34,31 +34,41 @@ Context completo:
 - **Pagamenti:** TBD (probabile Stripe per subscription pre-launch)
 - **Deploy:** Vercel (`fdf-orpin.vercel.app` pre-launch staging)
 - **Test:** Vitest
-- **Package manager:** pnpm (workspace monorepo)
+- **Package manager:** pnpm (single-package, no workspace al momento)
 - **CI:** GitHub Actions
 
-## Layout monorepo
+## Layout
+
+Repo flat single-package, **non monorepo**. Refactor a workspace
+package-based posticipato a quando esistono almeno 2 candidati di
+estrazione (vedi ADR-0006 §Decision 2 in `gargency-context/companies/
+fdf/decisions/ADR-0006-sinking-funds-taxonomy.md`).
 
 ```
-apps/web/          — Next.js App Router (landing, /api/health, future product UI)
-packages/          — (reserved) shared libs cross-app
+src/app/           — Next.js App Router (pages, layouts, /api/* route handlers)
+src/lib/           — logica condivisa (domain, supabase clients, utilities)
+src/components/    — componenti React condivisi
 supabase/          — schema, migrations, RLS policies (PLpgSQL)
 scripts/           — ops scripts (kill-fdf.sh, ecc.)
-tests/             — top-level integration tests
 .github/workflows/ — CI (lint, test, build)
 .claude/           — Claude Code config (settings, agents, hooks)
 docs/              — runbook, pilot docs
 ```
 
+`pnpm-workspace.yaml` esiste nel repo ma contiene solo
+`ignoredBuiltDependencies` — non definisce un workspace effettivo.
+Test colocated ai sorgenti via convention `*.test.ts` / `*.spec.ts`,
+nessuna directory top-level `tests/`.
+
 ## Comandi standard
 
 ```bash
 pnpm install              # install workspace
-pnpm dev                  # dev server (apps/web)
+pnpm dev                  # dev server
 pnpm lint                 # ESLint su tutto il workspace
 pnpm test                 # Vitest --run su tutto il workspace
 pnpm test --watch         # Vitest watch mode
-pnpm --filter web build   # production build (solo apps/web)
+pnpm build                # production build
 ./scripts/kill-fdf.sh     # kill switch (deploy disable < 5 min)
 ```
 
@@ -89,11 +99,17 @@ teammate non scrivono mai sullo stesso file.**
 
 | Teammate | Owns (write) | Reads (read-only) |
 |---|---|---|
-| `backend-dev` | `supabase/**`, `apps/web/app/api/**` | `packages/**`, `apps/web/lib/**` |
-| `domain-dev` | `packages/**`, `apps/web/lib/**` (logica pura) | `supabase/**` (schema), `apps/web/app/api/**` |
-| `frontend-dev` | `apps/web/app/**` (escluso `app/api/`), `apps/web/components/**` | `packages/**`, `apps/web/lib/**` |
-| `test-engineer` | `tests/**`, `**/*.test.ts`, `**/*.spec.ts` | tutto il repo |
+| `backend-dev` | `supabase/**`, `src/app/api/**` | `src/lib/**` |
+| `domain-dev` | `src/lib/domain/**` (logica pura) | `supabase/**` (schema), `src/app/api/**` |
+| `frontend-dev` | `src/app/**` (escluso `app/api/`), `src/components/**` | `src/lib/**` |
+| `test-engineer` | `**/*.test.ts`, `**/*.spec.ts` | tutto il repo |
 | `security-reviewer` | nessuno (read-only) | tutto il repo |
+
+**Altri sotto-path di `src/lib/`** (es. `src/lib/supabase/`,
+`src/lib/utils/`) non sono assegnati a uno specifico teammate in
+questo Step 2a. Modifica via ASK al lead. La prossima patch di questo
+file (Step 2b) li assegnerà esplicitamente, una volta creato il
+server client SSR (vedi ADR-0006 §Decision 3).
 
 **File condivisi (modifica solo via ASK al lead):**
 `package.json`, `pnpm-workspace.yaml`, `tsconfig.json`, `next.config.ts`,
