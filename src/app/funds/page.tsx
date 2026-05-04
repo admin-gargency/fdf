@@ -7,6 +7,7 @@
 import { cookies, headers } from "next/headers";
 import type { FundTreeNode } from "@/lib/domain/funds";
 import { FundTree } from "@/components/funds/FundTree";
+import { LogoutButton } from "@/components/auth/LogoutButton";
 
 // ---------------------------------------------------------------------------
 // Fetch interno via route handler /api/funds
@@ -86,9 +87,12 @@ export default async function FundsPage() {
 
   return (
     <main className="mx-auto flex min-h-full w-full max-w-3xl flex-col gap-8 px-6 py-20 sm:py-28">
-      <h1 className="text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-        I tuoi fondi
-      </h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+          I tuoi fondi
+        </h1>
+        <LogoutButton />
+      </div>
       {tree.length === 0 ? (
         <p className="text-base text-zinc-600 dark:text-zinc-400">
           Non hai ancora creato fondi. Quando creerai il tuo primo fondo,

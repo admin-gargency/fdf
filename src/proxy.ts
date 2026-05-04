@@ -1,3 +1,4 @@
+import { createServerClient } from "@supabase/ssr";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
@@ -5,7 +6,8 @@ export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico|public).*)"],
 };
 
-export function proxy(req: NextRequest) {
+export async function proxy(req: NextRequest) {
+  // ── 1. Kill switch (FIRST — always) ──────────────────────────────────────
   if (process.env.MAINTENANCE_MODE === "1") {
     return new NextResponse(
       JSON.stringify({
@@ -25,6 +27,8 @@ export function proxy(req: NextRequest) {
   }
 
   const path = req.nextUrl.pathname;
+
+  // ── 2. /admin basic auth (SECOND) ────────────────────────────────────────
   if (path.startsWith("/admin") || path.startsWith("/api/admin")) {
     const secret = process.env.ADMIN_SECRET;
     if (!secret) {
@@ -46,18 +50,67 @@ export function proxy(req: NextRequest) {
     }
   }
 
-  const res = NextResponse.next();
-  res.headers.set(
+  // ── 3. Auth redirect (THIRD — only for relevant paths) ───────────────────
+  const needsAuthCheck =
+    path.startsWith("/funds") ||
+    path === "/login" ||
+    path === "/signup";
+
+  // response is declared here so security headers can be applied to it,
+  // including when cookies are refreshed by the Supabase client setAll.
+  let response = NextResponse.next({ request: req });
+
+  if (needsAuthCheck) {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (url && anonKey) {
+      const supabase = createServerClient(url, anonKey, {
+        cookies: {
+          getAll() {
+            return req.cookies.getAll();
+          },
+          setAll(cookiesToSet) {
+            // Double-write: request first (for upstream handlers), then response
+            // (so the browser receives refreshed session tokens).
+            cookiesToSet.forEach(({ name, value }) =>
+              req.cookies.set(name, value),
+            );
+            response = NextResponse.next({ request: req });
+            cookiesToSet.forEach(({ name, value, options }) =>
+              response.cookies.set(name, value, options),
+            );
+          },
+        },
+      });
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (path.startsWith("/funds") && !user) {
+        return NextResponse.redirect(new URL("/login", req.url));
+      }
+
+      if ((path === "/login" || path === "/signup") && user) {
+        return NextResponse.redirect(new URL("/funds", req.url));
+      }
+    }
+    // Fail-safe: if env vars missing, fall through without redirect.
+  }
+
+  // ── 4. Security headers (LAST — applied to all non-redirected responses) ─
+  response.headers.set(
     "strict-transport-security",
     "max-age=31536000; includeSubDomains",
   );
-  res.headers.set("x-frame-options", "DENY");
-  res.headers.set("referrer-policy", "strict-origin-when-cross-origin");
-  res.headers.set(
+  response.headers.set("x-frame-options", "DENY");
+  response.headers.set("referrer-policy", "strict-origin-when-cross-origin");
+  response.headers.set(
     "permissions-policy",
     "camera=(), microphone=(), geolocation=(), payment=(self 'https://checkout.stripe.com')",
   );
-  return res;
+  return response;
 }
 
 function isValidBasic(header: string, secret: string): boolean {
