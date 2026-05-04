@@ -63,3 +63,4 @@ next-env.d.ts
 logs/
 .cache/
 .claude/cache/
+.env*.local
