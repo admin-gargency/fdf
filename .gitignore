@@ -64,3 +64,4 @@ logs/
 .cache/
 .claude/cache/
 .env*.local
+docs/INFRA-STATUS.md
