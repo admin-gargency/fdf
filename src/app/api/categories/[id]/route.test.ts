@@ -35,14 +35,14 @@ vi.mock("next/server", () => {
     init?: { status?: number },
   ) {
     return {
-      _body: body,
+      body,
       status: init?.status ?? 200,
       json: async () => (body ? JSON.parse(body as string) : null),
     };
   };
 
   MockNextResponse.json = (body: unknown, init?: { status?: number }) => ({
-    _body: body,
+    body,
     status: init?.status ?? 200,
     json: async () => body,
   });
@@ -471,7 +471,7 @@ describe("DELETE /api/categories/:id — soft delete", () => {
 
     expect(response.status).toBe(204);
     // 204 non ha body — _body è null
-    expect(response._body).toBeNull();
+    expect(response.body).toBeNull();
   });
 
   it("should return 204 idempotently when row is already archived (probe finds it)", async () => {
@@ -487,7 +487,7 @@ describe("DELETE /api/categories/:id — soft delete", () => {
     const response = await DELETE({} as never, { params: makeParams(UUID_CAT) });
 
     expect(response.status).toBe(204);
-    expect(response._body).toBeNull();
+    expect(response.body).toBeNull();
   });
 
   it("should return 404 NOT_FOUND when row does not exist or belongs to another household", async () => {
