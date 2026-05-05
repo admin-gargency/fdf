@@ -16,25 +16,43 @@ Stack + security decisions vivono in `gargency-context` come ADR company-level (
 
 ```bash
 pnpm install
-cp .env.example .env.local   # compila le variabili locali
-pnpm dev
+cp .env.example .env.local   # compila le variabili locali (vedi .env.example)
+pnpm dev                     # http://localhost:3000
 ```
+
+Variabili minime per il flow auth + funds:
+- `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` — client SSR
+- `SUPABASE_SERVICE_ROLE_KEY` — server-only, usato dal signup per il bootstrap household (vedi `docs/SMOKE-TEST-FEATURE-2.md` §"Bug Found and Fixed")
 
 ## Layout
 
+Repo flat single-package, **non monorepo** (vedi `AGENTS.md` per dettagli).
+
 ```
-apps/web/       — Next.js App Router: landing + /api/health + (future) product UI
-packages/       — (reserved) shared libs
-scripts/        — ops scripts (kill-fdf.sh)
-.github/        — CI workflows
-.claude/        — settings baseline (framework/runtime/claude-settings.baseline.json)
+src/app/           — Next.js App Router (pages, layouts, /api/* route handlers)
+  (auth)/          — route group login + signup (no URL prefix)
+  api/auth/        — POST signup | login | logout
+  funds/           — pagina /funds (protected via src/proxy.ts)
+src/lib/           — logica condivisa (domain, supabase clients SSR + admin)
+src/components/    — componenti React condivisi (auth/, funds/)
+src/proxy.ts       — Next.js 16 edge: kill switch + /admin auth + session redirect + security headers
+supabase/          — schema SQL, migrations, RLS policies
+scripts/           — ops scripts (kill-fdf.sh)
+.github/workflows/ — CI (lint, test, build)
+.claude/           — Claude Code config (settings, agents, hooks)
+docs/              — runbook, smoke test, infra status, brief feature
 ```
+
+## Stato prodotto
+
+- **Feature 1 — Tassonomia Sinking Funds (read-only)**: `/funds` legge il tree Fondo→Categoria→Classe via `GET /api/funds`. Empty state. Commit `8febe21`.
+- **Feature 2 — Auth System**: signup/login/logout con Supabase Auth + sessione cookie SSR; `/funds` protetto via `src/proxy.ts` (redirect intelligente fra `/login`, `/signup`, `/funds`); household + membership creati al signup (role `owner`). Smoke test: `docs/SMOKE-TEST-FEATURE-2.md`. Commit `380c579`.
 
 ## Ops
 
-- **Kill switch:** `./scripts/kill-fdf.sh` — disabilita la app entro <5 min (<60 min soglia massima per §4.6 Constitution v2.0).
+- **Kill switch:** `./scripts/kill-fdf.sh` — disabilita la app entro <5 min (<60 min soglia massima per §4.6 Constitution v2.0). Implementato in `src/proxy.ts` come primo check (env `MAINTENANCE_MODE=1` → 503 su tutti i path).
 - **Deploy:** Vercel (main branch → production); smoke kill-switch obbligatorio day-1.
-- **DB/Auth:** Supabase (EU, GDPR).
+- **DB/Auth:** Supabase (EU, GDPR). Email confirmation **OFF** in Auth providers (vedi `docs/INFRA-STATUS.md`).
 
 ## License
 

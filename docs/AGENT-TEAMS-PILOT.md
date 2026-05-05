@@ -180,8 +180,37 @@ Il pilot si chiude (kill o promote) quando si verifica una di queste:
 
 ### Feature 1 — Tassonomia Sinking Funds (read)
 
-- **Started:** _(compilare)_
-- **Completed:** _(compilare)_
-- **Outcome:** _(compilare)_
-- **Metrics:** _(compilare la tabella)_
-- **Lessons learned:** _(compilare)_
+- **Started:** 2026-04-23
+- **Completed:** 2026-05-04 (commit `8febe21` "feat: Feature 1 - /funds page with empty state", PR #4 merge)
+- **Outcome:** ✅ Shipped. `/funds` legge il tree Fondo→Categoria→Classe via `GET /api/funds`. Empty state, RLS verde.
+- **Metrics:** _(non compilate live — pre-pilot baseline)_
+- **Lessons learned:**
+  - Schema sinking funds household-scoped esisteva già nel core schema; backend-dev ha aggiunto solo `target_amount_cents`/`current_amount_cents` come migration additiva (`20260504120000_funds_categories_amounts.sql`).
+  - SSR client (`src/lib/supabase/server.ts`) introdotto qui, riusato da Feature 2.
+
+### Feature 2 — Auth System & Protected Routes
+
+- **Started:** 2026-05-05 (overnight session lead + 2 teammate sonnet)
+- **Completed:** 2026-05-05 (commit `380c579` "feat: Feature 2 - Auth system & protected routes", fast-forward merge su `main` da `feature/2-auth-system`)
+- **Outcome:** ✅ Shipped. User journey completo verificato: signup → /funds empty state → logout → /login → /funds. 12 PASS su 12 step smoke (`docs/SMOKE-TEST-FEATURE-2.md`). Quality gates verdi: lint + typecheck + 133 test + build.
+- **Files toccati:** 10 (854 righe). Ownership rispettata: backend-dev su `src/app/api/auth/**` + `src/proxy.ts` (con ASK al lead per il proxy.ts) + `docs/SMOKE-TEST-FEATURE-2.md`; frontend-dev su `src/app/(auth)/**` + `src/components/auth/**` + patch logout su `src/app/funds/page.tsx`.
+- **BLOCK escalati:** 3
+  1. **Supabase rate limit email** sul signup happy-path → CEO ha disabilitato "Confirm email" in Auth providers, sblocco immediato.
+  2. **Conflict middleware.ts vs proxy.ts** (Next.js 16 li rende mutuamente esclusivi) → user ha approvato estensione additiva di `src/proxy.ts` preservando precedence del kill switch.
+  3. **Bug schema RLS scoperto durante E2E** (households SELECT-after-INSERT + household_members WITH CHECK ricorsivo) → fix applicativo via service role nel signup, fix schema deferito a Feature 3+ (vedi `supabase/README.md` §"Known schema issues").
+- **Lessons learned:**
+  - Il brief tecnico di Feature 2 (`docs/FEATURE-2-BRIEF.md`) era basato su `middleware.ts` deprecato e su un assunto sbagliato sulla policy di INSERT — entrambi corretti dal team durante l'esecuzione. **Pattern utile:** brief è scaffold, non specifica vincolante; deviazioni giustificate vanno approvate dal lead, non eseguite silenziosamente.
+  - **BLOCK è stato l'outcome corretto** per i tre incidenti, non un fallimento del team. La memoria CEO "fermare un team con premesse sbagliate è il successo del dry-run" si è confermata operativa.
+  - Service role per bootstrap operations è un pattern valido SE l'`auth.uid()` è verificato via SSR client PRIMA e l'input al service role è pinned al valore validato. Documentato come pattern noto in `AGENTS.md` §"Pattern noti".
+  - File ownership pulita: zero overwrite tra teammate. La separazione `src/proxy.ts` come "shared/ASK al lead" ha funzionato.
+- **Metrics:**
+
+  | Metrica | Target | Misurato |
+  |---|---|---|
+  | Wall-clock time | < 70% di single-session stimato (~3-4h) | ~1.5h spawn → merge (≈ 50%) |
+  | Test verdi al primo merge | ≥ 90% | 133/133 PASS, 0 regressioni |
+  | Token consumption totale | < 4× single-session | _(non misurato)_ |
+  | Conflict rate file overwrite | 0 | **0** ✅ |
+  | Iterazioni rework post-PR | ≤ 2 | **0** (smoke test completo pre-merge) |
+  | Regressioni a 7gg | ≤ 1 | _(da rilevare)_ |
+  | BLOCK escalati | informativo | **3** (rate limit, proxy.ts, bug schema) — tutti risolti correttamente |

@@ -46,19 +46,44 @@ fdf/decisions/ADR-0006-sinking-funds-taxonomy.md`).
 
 ```
 src/app/           — Next.js App Router (pages, layouts, /api/* route handlers)
+  (auth)/          — route group login + signup
+  api/auth/        — POST signup | login | logout
+  funds/           — pagina /funds protetta via proxy
 src/lib/           — logica condivisa (domain, supabase clients, utilities)
-src/components/    — componenti React condivisi
+  supabase/        — server.ts (SSR anon-key) + admin.ts (service role)
+  domain/          — funds.ts (logica pura — domain-dev territory)
+src/components/    — componenti React condivisi (auth/, funds/)
+src/proxy.ts       — Next.js 16 edge: kill switch + /admin auth + session redirect + security headers
 supabase/          — schema, migrations, RLS policies (PLpgSQL)
 scripts/           — ops scripts (kill-fdf.sh, ecc.)
 .github/workflows/ — CI (lint, test, build)
 .claude/           — Claude Code config (settings, agents, hooks)
-docs/              — runbook, pilot docs
+docs/              — runbook, pilot docs, smoke test, brief feature
 ```
 
 `pnpm-workspace.yaml` esiste nel repo ma contiene solo
 `ignoredBuiltDependencies` — non definisce un workspace effettivo.
 Test colocated ai sorgenti via convention `*.test.ts` / `*.spec.ts`,
 nessuna directory top-level `tests/`.
+
+### Edge middleware: `src/proxy.ts`, NON `middleware.ts`
+
+Next.js 16 ha rinominato `middleware.ts` → `proxy.ts`. **I due file sono
+mutuamente esclusivi**: la presenza di entrambi rompe il build con
+`Both middleware file and proxy file are detected`. Tutta la logica edge
+di FdF vive in `src/proxy.ts` con quest'ordine non negoziabile:
+
+1. **Kill switch** (`MAINTENANCE_MODE=1` → 503) — sempre primo.
+2. **`/admin` Basic auth** (matcher `/admin/*` e `/api/admin/*`).
+3. **Auth redirect Supabase** — solo per `/funds/*`, `/login`, `/signup`
+   (per evitare round-trip `getUser()` su path non rilevanti). Cookie
+   pattern moderno `getAll`/`setAll` con doppia-write request+response.
+4. **Security headers** (`strict-transport-security`, `x-frame-options`,
+   `referrer-policy`, `permissions-policy`) sul response finale.
+
+Estensioni a `src/proxy.ts` sono ASK al lead anche quando puramente
+additive: il kill switch ha precedenza costituzionale (§4.6) e l'ordine
+dei check non è alterabile.
 
 ## Comandi standard
 
@@ -99,22 +124,31 @@ teammate non scrivono mai sullo stesso file.**
 
 | Teammate | Owns (write) | Reads (read-only) |
 |---|---|---|
-| `backend-dev` | `supabase/**`, `src/app/api/**` | `src/lib/**` |
+| `backend-dev` | `supabase/**`, `src/app/api/**`, `src/lib/supabase/**` | `src/lib/domain/**` |
 | `domain-dev` | `src/lib/domain/**` (logica pura) | `supabase/**` (schema), `src/app/api/**` |
 | `frontend-dev` | `src/app/**` (escluso `app/api/`), `src/components/**` | `src/lib/**` |
 | `test-engineer` | `**/*.test.ts`, `**/*.spec.ts` | tutto il repo |
 | `security-reviewer` | nessuno (read-only) | tutto il repo |
 
-**Altri sotto-path di `src/lib/`** (es. `src/lib/supabase/`,
-`src/lib/utils/`) non sono assegnati a uno specifico teammate in
-questo Step 2a. Modifica via ASK al lead. La prossima patch di questo
-file (Step 2b) li assegnerà esplicitamente, una volta creato il
-server client SSR (vedi ADR-0006 §Decision 3).
+**`src/lib/supabase/`** è `backend-dev` territory: include `server.ts`
+(client SSR autenticato anon-key, usato dalle route handler) e `admin.ts`
+(service-role, da usare con parsimonia per bootstrap operations dopo
+aver validato `auth.uid()`). Vedi `docs/SMOKE-TEST-FEATURE-2.md` per il
+pattern di uso combinato in `src/app/api/auth/signup/route.ts`.
+
+**Altri sotto-path di `src/lib/`** (es. `src/lib/utils/`,
+`src/lib/ingestion/`, `src/lib/waitlist/`) non sono assegnati a un
+teammate specifico. Modifica via ASK al lead.
+
+**`src/proxy.ts`** è file condiviso (kill switch sensitivo): qualsiasi
+modifica — anche additiva — richiede ASK al lead. Dettaglio sopra in
+§"Edge middleware".
 
 **File condivisi (modifica solo via ASK al lead):**
 `package.json`, `pnpm-workspace.yaml`, `tsconfig.json`, `next.config.ts`,
 `vercel.json`, `vitest.config.ts`, `eslint.config.mjs`, `.env.example`,
-`AGENTS.md`, `CLAUDE.md`, `README.md`, `.github/workflows/**`.
+`src/proxy.ts`, `AGENTS.md`, `CLAUDE.md`, `README.md`,
+`.github/workflows/**`.
 
 ## Communication protocol
 
@@ -153,6 +187,31 @@ Hooks quality gate: `.claude/hooks/{task-completed,teammate-idle}.sh`.
 5. **Migration reversibili.** Ogni migration in `supabase/migrations/`
    deve avere counter-migration documentata (anche solo come commento)
    per rollback rapido.
+
+## Pattern noti
+
+### Bootstrap household al signup (Feature 2)
+
+Le RLS policies attuali su `households` e `household_members` non
+supportano il flusso bootstrap "utente crea il proprio primo household
++ membership" via SSR anon-key client:
+
+- `households_select_member` USING blocca il `RETURNING` implicito di
+  `.insert(...).select(...)` perché l'utente non è ancora membro.
+- `household_members_insert_self_or_owner` ha sub-query ricorsiva su sé
+  stesso → SQLSTATE 42P17 "infinite recursion detected in policy".
+
+Workaround corrente in `src/app/api/auth/signup/route.ts`:
+1. SSR client (`getServerSupabaseClient()`) per signUp + signInWithPassword
+   + getUser (validazione `auth.uid()`).
+2. Admin client (`getAdminClient()`, service role) per i due insert
+   (households + household_members), con `userId` pinned al valore
+   verificato lato auth — nessun input utente raggiunge il service role.
+
+Schema fix vero (RPC SECURITY DEFINER o riscrittura policy ricorsiva)
+deferito a Feature 3+ (ASK su RLS esistenti). Documentato in
+`docs/SMOKE-TEST-FEATURE-2.md` §"Bug Found and Fixed" e in
+`supabase/README.md` §"Known schema issues".
 
 ## Riferimenti rapidi
 
