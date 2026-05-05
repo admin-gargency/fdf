@@ -2,8 +2,9 @@
  * funds.ts — Branded types, Zod schemas, and pure tree-building logic
  * for the Fondo → Categoria → Classe taxonomy (ADR-0006).
  *
- * Ownership: backend-dev (AGENTS.md §File ownership convention).
- * Consumed by: src/app/api/funds/route.ts, frontend-dev (read-only).
+ * Ownership: domain-dev (AGENTS.md §File ownership convention).
+ * Consumed by: src/app/api/funds/route.ts, src/lib/domain/sinking-funds-tree.ts,
+ *   frontend-dev (read-only).
  */
 
 import { z } from "zod";
@@ -17,12 +18,15 @@ declare const _CategoryId: unique symbol;
 declare const _ClassId: unique symbol;
 declare const _AccountId: unique symbol;
 declare const _Cents: unique symbol;
+declare const _SinkingFundId: unique symbol;
 
 export type FundId = string & { readonly [_FundId]: void };
 export type CategoryId = string & { readonly [_CategoryId]: void };
 export type ClassId = string & { readonly [_ClassId]: void };
 export type AccountId = string & { readonly [_AccountId]: void };
 export type Cents = number & { readonly [_Cents]: void };
+/** Branded type for `sinking_funds.id` UUID. */
+export type SinkingFundId = string & { readonly [_SinkingFundId]: void };
 
 export type Tipologia =
   | "addebito_immediato"
@@ -91,6 +95,32 @@ export const ClassRowSchema = z.object({
 export type FundRow = z.infer<typeof FundRowSchema>;
 export type CategoryRow = z.infer<typeof CategoryRowSchema>;
 export type ClassRow = z.infer<typeof ClassRowSchema>;
+
+/**
+ * SinkingFundRowSchema — aligned to the GRANT SELECT columns in
+ * `supabase/migrations/20260424000004_grants.sql` L162-163.
+ *
+ * `notes` is deliberately excluded: it is ungranted PII
+ * (grants.sql L159-160; DO NOT add it here).
+ *
+ * `target_date` is a Postgres `date` — serialised as ISO date string
+ * ("YYYY-MM-DD") or null.
+ *
+ * Feature 5 context: FEATURE-5-BRIEF.md §"Data model".
+ */
+export const SinkingFundRowSchema = z.object({
+  id: z.string().uuid(),
+  household_id: z.string().uuid(),
+  class_id: z.string().uuid(),
+  target_cents: z.number().int(),
+  target_date: z.string().nullable(),
+  monthly_contribution_cents: z.number().int(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+/** TypeScript type inferred from {@link SinkingFundRowSchema}. */
+export type SinkingFundRow = z.infer<typeof SinkingFundRowSchema>;
 
 // ---------------------------------------------------------------------------
 // Tree output types
