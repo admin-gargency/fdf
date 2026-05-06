@@ -48,13 +48,18 @@ fdf/decisions/ADR-0006-sinking-funds-taxonomy.md`).
 src/app/           — Next.js App Router (pages, layouts, /api/* route handlers)
   (auth)/          — route group login + signup
   api/auth/        — POST signup | login | logout
-  funds/           — pagina /funds protetta via proxy
+  api/{funds,categories,classes,transactions,budgets}/         — CRUD route handlers
+  api/transactions/import-csv/                                 — POST bulk import multipart (F8)
+  api/ingestion/amex/csv/                                      — Amex CSV parse-and-return endpoint (legacy)
+  funds/, categories/, classes/, transactions/, budgets/, sinking-funds-tree/ — pagine protette
+  transactions/import/                                         — UI import CSV (F8)
 src/lib/           — logica condivisa (domain, supabase clients, utilities)
   supabase/        — server.ts (SSR anon-key) + admin.ts (service role)
-  domain/          — funds.ts (logica pura — domain-dev territory)
-src/components/    — componenti React condivisi (auth/, funds/)
+  domain/          — funds, transactions, budgets, csv-import, sinking-funds-tree (logica pura — domain-dev)
+  ingestion/       — generic-csv parser + amex (parser/normalize/rate-limit), utility riusabili
+src/components/    — componenti React condivisi (auth/, funds/, transactions/, budgets/, csv-import/, ...)
 src/proxy.ts       — Next.js 16 edge: kill switch + /admin auth + session redirect + security headers
-supabase/          — schema, migrations, RLS policies (PLpgSQL)
+supabase/          — schema, migrations, RLS policies (PLpgSQL), GRANT column-level
 scripts/           — ops scripts (kill-fdf.sh, ecc.)
 .github/workflows/ — CI (lint, test, build)
 .claude/           — Claude Code config (settings, agents, hooks)
@@ -212,6 +217,62 @@ Schema fix vero (RPC SECURITY DEFINER o riscrittura policy ricorsiva)
 deferito a Feature 3+ (ASK su RLS esistenti). Documentato in
 `docs/SMOKE-TEST-FEATURE-2.md` §"Bug Found and Fixed" e in
 `supabase/README.md` §"Known schema issues".
+
+### Bulk ingestion via service-role per audit columns (Feature 8)
+
+Pattern distinto dal bootstrap F2 ma con stesso scaffold (admin-client
+post-validation SSR). Il `GRANT INSERT` su `transactions` per
+`authenticated` esclude tre colonne — vedi
+`supabase/migrations/20260424000004_grants.sql` L120-125 e il commento
+"raw_description e external_id sono scritti da ingestion server-side
+(service-role), non da client":
+
+- `raw_description` — bank feed PII (GDPR art. 9)
+- `external_id` — dedup key, fingerprinting risk
+- `created_by` — audit trail
+
+Conseguenza: ogni endpoint di ingestion bulk che popola `external_id`
+(per `ON CONFLICT (account_id, external_id)`) o audit fields **deve**
+usare admin client. Pattern in
+`src/app/api/transactions/import-csv/route.ts`:
+
+1. SSR client (`getServerSupabaseClient()`) → `getUser()` (auth) →
+   rate-limit (`hitRateLimit("import-csv:${userId}")`).
+2. Multipart parse + file validation (size, MIME, extension).
+3. SSR client (RLS attiva) per ownership check su account:
+   `SELECT household_id FROM accounts WHERE id = $1` — 0 rows = 404.
+4. Estrai `household_id` dal record account; questo è il valore pinned
+   server-side per il bulk insert.
+5. Parse CSV via domain layer (puro, niente I/O).
+6. Admin client (`getAdminClient()`) per `.upsert(rows, { onConflict:
+   "account_id,external_id", ignoreDuplicates: true })`. `household_id`,
+   `created_by`, `external_id`, `source: "import_csv"` sono **pinned
+   lato server**, mai da input utente raw. Chunking 500 righe.
+
+Validazione SSR-prima-di-admin è **non negoziabile** (security review
+FDFA-62 §I-1 confermato).
+
+**Riuso utility ingestion** (read-only per domain-dev, non riassegnate):
+- `src/lib/ingestion/generic-csv.ts` — `parseCsv`, `stripBom`,
+  `detectSeparator` (BOM strip, quoted fields, separator auto-detect)
+- `src/lib/ingestion/amex/normalize.ts` — `parseItalianAmount`
+  (separatori it-IT)
+- `src/lib/ingestion/amex/rate-limit.ts` — `hitRateLimit(key)` con
+  bucket per-user, in-memory globalThis (caveat multi-instance Vercel
+  documentato — accettabile pre-launch)
+
+**Convenzione `amount_cents`**: nel codebase il tipo è
+`z.number().int()`, NON `z.bigint()`. Supabase JS serializza
+Postgres `bigint` come JS `number` — usare `z.bigint()` causerebbe
+parse failure runtime. Confermato in `transactions.ts`, `budgets.ts`,
+`csv-import.ts`.
+
+**Debt aperto F8** (security review FDFA-62, post-merge):
+- M-2: documentare memory limits operativi (5MB CSV → ~80-120MB peak/req
+  in heap), considerare `MAX_BYTES = 2MB` o streaming parse.
+- L-1: sanitize formula characters (`=`, `+`, `-`, `@`) **on export**
+  (CSV/XLSX), NON nel dominio. Tracked per quando arriverà export
+  feature. La UI HTML attuale non è vettore.
 
 ## Riferimenti rapidi
 
