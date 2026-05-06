@@ -194,7 +194,6 @@ function parseFinecoDate(token: string): string | null {
  * Tries to parse a date string in multiple formats:
  *   1. YYYY-MM-DD (ISO)
  *   2. DD/MM/YYYY (Italian / Fineco)
- *   3. MM/DD/YYYY (US)
  *
  * Returns the ISO "YYYY-MM-DD" string, or `null` if no format matches.
  */
@@ -215,30 +214,13 @@ function parseGenericDate(token: string): string | null {
     return null;
   }
 
-  // 2. DD/MM/YYYY (Italian)
+  // 2. DD/MM/YYYY (Italian) — FdF is Italian-first PFM. MM/DD (US) is not
+  // supported: ambiguous strings ("12/05/2026") would be misinterpreted.
   const ddMmYyyy = trimmed.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
   if (ddMmYyyy) {
     const day = parseInt(ddMmYyyy[1], 10);
     const month = parseInt(ddMmYyyy[2], 10);
     const year = parseInt(ddMmYyyy[3], 10);
-    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-      const d = new Date(Date.UTC(year, month - 1, day));
-      if (
-        d.getUTCFullYear() === year &&
-        d.getUTCMonth() === month - 1 &&
-        d.getUTCDate() === day
-      ) {
-        return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-      }
-    }
-  }
-
-  // 3. MM/DD/YYYY (US)
-  const mmDdYyyy = trimmed.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (mmDdYyyy) {
-    const month = parseInt(mmDdYyyy[1], 10);
-    const day = parseInt(mmDdYyyy[2], 10);
-    const year = parseInt(mmDdYyyy[3], 10);
     if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
       const d = new Date(Date.UTC(year, month - 1, day));
       if (
@@ -436,7 +418,7 @@ export function parseFinecoCSV(
  * (case-sensitive). The CSV separator is auto-detected (comma, semicolon,
  * or tab).
  *
- * Date parsing order: YYYY-MM-DD → DD/MM/YYYY → MM/DD/YYYY.
+ * Date parsing order: YYYY-MM-DD → DD/MM/YYYY.
  * Amount: parsed as float, Italian comma separator normalised to dot,
  *   then converted to integer cents.
  * Sign: positive amount → inflow; negative → outflow.

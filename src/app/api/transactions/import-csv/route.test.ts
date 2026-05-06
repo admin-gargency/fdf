@@ -9,9 +9,8 @@
  * Fixtures: inline strings only — no real PII, IBAN, or production amounts
  * (security review FDFA-62 I-10).
  *
- * M-1 note (security review FDFA-62): the catch block at route.ts:368-375
- * returns code "INSERT_ERROR" for unexpected parse errors. Tests that exercise
- * this path are annotated "(M-1: misleading code, see security review)".
+ * Error code taxonomy: PARSE_ERROR for unexpected parse failures (catch in
+ * route.ts parse path), INSERT_ERROR for admin upsert failures only.
  *
  * E2E: tests/e2e/ infrastructure does not exist. Integration tests cover
  * critical paths including the full happy path and all error codes.
