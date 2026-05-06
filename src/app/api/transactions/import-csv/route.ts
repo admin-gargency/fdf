@@ -372,7 +372,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         message: err instanceof Error ? err.message : String(err),
       }),
     );
-    return jsonError(500, "INSERT_ERROR");
+    return jsonError(500, "PARSE_ERROR");
   }
 
   // No valid rows to insert — return early with any non-fatal errors.

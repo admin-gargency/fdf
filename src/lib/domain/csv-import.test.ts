@@ -11,10 +11,9 @@
  *   - parseGenericCSV: happy path, missing columnMap columns, date formats,
  *     amount signs, BOM strip
  *
- * L-2 note (security review FDFA-62): parseGenericDate MM/DD/YYYY branch is
- * unreachable — the regex at line 237 is identical to the DD/MM branch at
- * line 219. All DD/MM inputs are consumed by branch 2; branch 3 never fires.
- * Tests below cover ONLY the reachable DD/MM path in parseGenericCSV.
+ * Date formats supported: ISO (YYYY-MM-DD) and Italian DD/MM/YYYY only.
+ * MM/DD (US) intentionally not supported — FdF is Italian-first PFM,
+ * ambiguous strings would be misinterpreted.
  */
 
 import { describe, it, expect } from "vitest";
@@ -590,7 +589,6 @@ describe("parseGenericCSV", () => {
     });
 
     it("should parse DD/MM/YYYY 01/05/2026 → 2026-05-01", () => {
-      // L-2: MM/DD branch is unreachable (same regex as DD/MM). Only testing DD/MM path.
       const csv = ["Date,Amount,Memo", "01/05/2026,100.00,Test"].join("\n");
       const { rows } = parseGenericCSV(csv, { account_id: UUID_ACC_A, columnMap });
       expect(rows[0].booked_at).toBe("2026-05-01");
